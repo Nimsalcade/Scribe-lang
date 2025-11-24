@@ -1,0 +1,52 @@
+fn main() -> number:
+    println("=== Scribe Demo Program ===")
+    println("")
+    
+    println("Welcome to Scribe!")
+    println("The modern programming language")
+    println("")
+    
+    println("Doing some math...")
+    let a = 10
+    let b = 20
+    let sum = a + b
+    let product = a * b
+    let difference = b - a
+    
+    println("10 + 20 =")
+    println_number(sum)
+    
+    println("10 * 20 =")
+    println_number(product)
+    
+    println("20 - 10 =")
+    println_number(difference)
+    
+    println("")
+    println("Testing conditions...")
+    
+    if sum > 25:
+        println("Sum is greater than 25!")
+    else:
+        println("Sum is 25 or less")
+    
+    if product > 100:
+        println("Product is greater than 100!")
+    else:
+        println("Product is 100 or less")
+    
+    println("")
+    println("Testing boolean logic...")
+    
+    let is_big = sum > 20
+    let is_positive = a > 0
+    
+    if is_big and is_positive:
+        println("Number is big AND positive")
+    
+    if is_big or is_positive:
+        println("Number is big OR positive")
+    
+    println("")
+    println("=== Demo Complete ===")
+    return 0

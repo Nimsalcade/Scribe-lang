@@ -1,0 +1,16 @@
+[package]
+name = "scribe-std"
+version = "0.1.0"
+edition = "2021"
+description = "Scribe standard library runtime"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[features]
+default = []
+http = ["ureq"]
+
+[dependencies]
+ureq = { version = "2.9", optional = true }
+

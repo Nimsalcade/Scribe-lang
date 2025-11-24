@@ -1,0 +1,7 @@
+[package]
+name = "loops-example"
+version = "0.1.0"
+
+[build]
+main = "main.scribe"
+

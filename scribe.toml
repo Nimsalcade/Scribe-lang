@@ -1,0 +1,12 @@
+[package]
+name = "scribe"
+version = "0.1.0"
+description = "Scribe programming language: compiler, runtime, and standard library"
+authors = ["Scribe Authors <devs@scribe-lang.org>"]
+license = "MIT"
+
+[toolchain]
+min_version = "0.1.0"
+
+[dependencies]
+std = "0.1"

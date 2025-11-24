@@ -1,0 +1,20 @@
+[package]
+name = "scribe-runtime"
+version = "0.1.0"
+edition = "2021"
+authors = ["Scribe Authors <devs@scribe-lang.org>"]
+license = "MIT"
+description = "Async runtime prototypes for the Scribe language"
+
+[dependencies]
+futures = "0.3"
+futures-timer = "3.0"
+
+[features]
+default = []
+http = ["reqwest"]
+
+[dependencies.reqwest]
+version = "0.11"
+features = ["json", "blocking"]
+optional = true

@@ -1,0 +1,3 @@
+fn main() -> number:
+    println("Hello, Scribe!")
+    return 0

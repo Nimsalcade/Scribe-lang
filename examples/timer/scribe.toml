@@ -1,0 +1,11 @@
+[package]
+name = "timer-example"
+version = "0.1.0"
+description = "Async timer demonstration"
+
+[build]
+main = "main.scribe"
+
+[dependencies]
+std = "*"
+

@@ -1,0 +1,12 @@
+[package]
+name = "scribe-codegen"
+version = "0.1.0"
+edition = "2021"
+authors = ["Scribe Authors <devs@scribe-lang.org>"]
+license = "MIT"
+description = "Backend code generators for the Scribe language"
+
+[dependencies]
+inkwell = { version = "0.2", default-features = false, features = ["llvm15-0"] }
+scribe-compiler = { path = "../compiler" }
+thiserror = "1.0"

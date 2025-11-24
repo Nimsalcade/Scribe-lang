@@ -1,0 +1,16 @@
+record Point(x: number, y: number)
+
+record Person:
+    name: text
+    age: number
+
+fn create_point(x: number, y: number) -> number:
+    let p = Point(x = x, y = y)
+    return 0
+
+fn main() -> number:
+    let origin = Point(x = 0, y = 0)
+    let target = Point(x = 10, y = 20)
+    println("Records created successfully!")
+    return 0
+

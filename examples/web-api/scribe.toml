@@ -1,0 +1,19 @@
+[package]
+name = "web-api"
+version = "0.1.0"
+description = "HTTP JSON API example for Scribe"
+authors = ["Scribe Authors <devs@scribe-lang.org>"]
+license = "MIT"
+
+[build]
+main = "main"
+
+[toolchain]
+min_version = "0.1.0"
+
+[dependencies]
+core = "0.1"
+text = "0.1"
+http = "0.1"
+json = "0.1"
+time = "0.1"

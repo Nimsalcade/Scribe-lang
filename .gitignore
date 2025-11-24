@@ -1,0 +1,35 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Cargo lock file for libraries (keep for binaries)
+# Cargo.lock
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build outputs
+*.o
+*.a
+*.so
+*.dylib
+
+# Scribe build artifacts
+**/target/scribe/
+
+# Environment files
+.env
+.env.local
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+

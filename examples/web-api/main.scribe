@@ -1,0 +1,88 @@
+module examples.web_api
+
+use http
+use json
+use time
+
+# Data types for the API
+record HealthStatus:
+    ok: bool
+    version: text
+    uptime: number
+
+record User:
+    id: number
+    name: text
+    email: text
+
+record ApiResponse:
+    success: bool
+    data: text
+    error: text
+
+# Global state (simplified for demo)
+let server_start_time = 0
+
+# Health check endpoint
+async fn handle_health(req: Request) -> Response:
+    let status = HealthStatus(
+        ok = true,
+        version = "0.1.0",
+        uptime = now() - server_start_time
+    )
+    let body = json.stringify(status)
+    Response.ok_json(body)
+
+# GET /users - list all users
+async fn handle_list_users(req: Request) -> Response:
+    # In a real app, this would query a database
+    let users = "[{\"id\": 1, \"name\": \"Alice\"}, {\"id\": 2, \"name\": \"Bob\"}]"
+    Response.ok_json(users)
+
+# POST /users - create a new user
+async fn handle_create_user(req: Request) -> Response:
+    let body = req.body()
+    # Parse and validate the user data
+    let response = ApiResponse(
+        success = true,
+        data = body,
+        error = ""
+    )
+    Response.created_json(json.stringify(response))
+
+# GET /users/:id - get a specific user
+async fn handle_get_user(req: Request) -> Response:
+    let id = req.param("id")
+    if id == "1":
+        let user = User(id = 1, name = "Alice", email = "alice@example.com")
+        Response.ok_json(json.stringify(user))
+    else if id == "2":
+        let user = User(id = 2, name = "Bob", email = "bob@example.com")
+        Response.ok_json(json.stringify(user))
+    else:
+        Response.not_found("User not found")
+
+# Main entry point
+fn main() -> number:
+    server_start_time = now()
+    
+    let app = http.server()
+    
+    # Register routes
+    app.get("/health", handle_health)
+    app.get("/users", handle_list_users)
+    app.post("/users", handle_create_user)
+    app.get("/users/:id", handle_get_user)
+    
+    println("Scribe Web API Server")
+    println("=====================")
+    println("Listening on http://localhost:8080")
+    println("")
+    println("Endpoints:")
+    println("  GET  /health     - Health check")
+    println("  GET  /users      - List all users")
+    println("  POST /users      - Create a user")
+    println("  GET  /users/:id  - Get user by ID")
+    
+    app.listen(port = 8080)
+    0

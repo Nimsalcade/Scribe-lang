@@ -1,0 +1,16 @@
+[package]
+name = "hello-world"
+version = "0.1.0"
+description = "Hello world example for Scribe"
+authors = ["Scribe Authors <devs@scribe-lang.org>"]
+license = "MIT"
+
+[build]
+main = "main"
+
+[toolchain]
+min_version = "0.1.0"
+
+[dependencies]
+core = "0.1"
+text = "0.1"

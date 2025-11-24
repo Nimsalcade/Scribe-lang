@@ -1,0 +1,10 @@
+[package]
+name = "scribe-compiler"
+version = "0.1.0"
+edition = "2021"
+authors = ["Scribe Authors <devs@scribe-lang.org>"]
+license = "MIT"
+description = "Compiler front-end for the Scribe programming language"
+
+[dependencies]
+thiserror = "1.0"
