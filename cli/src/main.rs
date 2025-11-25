@@ -16,6 +16,9 @@ use scribe_compiler::{
 use scribe_runtime::Runtime;
 use serde::Deserialize;
 
+// Ensure scribe_std is compiled (staticlib) by referencing it
+use scribe_std;
+
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub enum EmitKind {
     /// Emit only the object file (.o)
@@ -64,6 +67,9 @@ enum Commands {
 }
 
 fn main() {
+    // Ensure scribe_std static library is linked
+    scribe_std::build_marker();
+    
     let cli = Cli::parse();
     if let Err(err) = dispatch(cli.command) {
         eprintln!("error: {err}");
@@ -355,27 +361,51 @@ fn link_executable(project: &Path, obj_path: &Path, _release: bool) -> Result<Pa
 }
 
 /// Find the Scribe standard library static archive
+/// Returns the full path to the libscribe_std.a file
 fn find_scribe_std_lib() -> Option<PathBuf> {
-    // Check common locations for the compiled std library
-    let candidates = [
-        // Development: in the workspace target directory
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .map(|p| p.join("target/release/libscribe_std.a")),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .map(|p| p.join("target/debug/libscribe_std.a")),
-        // Installed location
-        dirs::data_local_dir().map(|p| p.join("scribe/lib/libscribe_std.a")),
-    ];
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.to_path_buf());
 
-    for candidate in candidates.into_iter().flatten() {
-        if candidate.exists() {
-            return Some(candidate);
+    // Try to find the library in deps directory (where Cargo puts versioned artifacts)
+    if let Some(root) = workspace_root {
+        // Check debug deps first
+        let debug_deps = root.join("target/debug/deps");
+        if debug_deps.exists() {
+            // Look for any libscribe_std-*.a file
+            if let Ok(entries) = std::fs::read_dir(&debug_deps) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(name) = path.file_name() {
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with("libscribe_std-") && name_str.ends_with(".a") {
+                            return Some(path);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check release deps
+        let release_deps = root.join("target/release/deps");
+        if release_deps.exists() {
+            if let Ok(entries) = std::fs::read_dir(&release_deps) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(name) = path.file_name() {
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with("libscribe_std-") && name_str.ends_with(".a") {
+                            return Some(path);
+                        }
+                    }
+                }
+            }
         }
     }
 
-    None
+    // Fallback to installed location
+    dirs::data_local_dir().map(|p| p.join("scribe/lib/libscribe_std.a"))
+
 }
 
 fn format_ir(ir_module: &IrModule) -> String {

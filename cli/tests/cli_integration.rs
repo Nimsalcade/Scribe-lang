@@ -67,6 +67,28 @@ fn build_example_emits_executable() {
     let _ = output;
 }
 
+#[test]
+fn run_hello_world_executable() {
+    let project = workspace_root().join("examples/hello-world");
+    let target_dir = project.join("target/scribe");
+    
+    // Clean the target directory to ensure a fresh build
+    let _ = fs::remove_dir_all(&target_dir);
+    
+    let bin = assert_cmd::cargo::cargo_bin!("scribe-cli");
+    let output = Command::new(bin)
+        .args(["run", "--project", project.to_str().unwrap()])
+        .output()
+        .expect("failed to run scribe-cli");
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    
+    // Check that the executable ran successfully with native binary output
+    assert!(output.status.success(), "scribe-cli run failed with status: {}\nstdout: {}\nstderr: {}", output.status, stdout, stderr);
+    assert!(stdout.contains("Hello, Scribe!"), "expected 'Hello, Scribe!' in output, got:\nstdout: {}\nstderr: {}", stdout, stderr);
+}
+
 // Note: The timer and web-api examples use syntax features (module declarations,
 // use statements, records, for loops, etc.) that the parser now supports but
 // the type checker and lowering passes don't fully handle yet.
