@@ -430,6 +430,10 @@ pub unsafe extern "C" fn scribe_http_post(
     }
 }
 
+/// Marker function to ensure this crate is compiled when referenced
+/// This is used to eagerly compile the static library during `cargo build -p scribe-cli`
+pub fn build_marker() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
