@@ -101,3 +101,37 @@ fn check_example_web_api() {
         .assert()
         .success();
 }
+
+#[test]
+fn build_multi_module_project() {
+    // Test that multi-module projects can be compiled without panics
+    let project = workspace_root().join("examples/demo");
+    let target_ir = project.join("target/scribe/main.ir");
+    let target_obj = project.join("target/scribe/module.o");
+    let _ = fs::remove_file(&target_ir);
+    let _ = fs::remove_file(&target_obj);
+
+    let bin = assert_cmd::cargo::cargo_bin!("scribe-cli");
+    let output = Command::new(bin)
+        .args([
+            "build",
+            "--project",
+            project.to_str().unwrap(),
+            "--emit",
+            "obj",
+        ])
+        .output()
+        .expect("failed to run build");
+
+    // Check that it succeeded
+    assert!(output.status.success(), "build failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    // Check that artifacts were emitted
+    assert!(target_ir.exists(), "expected IR file at {}", target_ir.display());
+    assert!(target_obj.exists(), "expected object file at {}", target_obj.display());
+
+    // Check that the output mentions multiple modules were compiled
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("compiled 3 module(s)"), 
+        "output did not mention 3 compiled modules: {}", stdout);
+}
