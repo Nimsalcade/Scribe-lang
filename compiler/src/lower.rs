@@ -73,7 +73,11 @@ fn lower_function(function: &Function) -> crate::ir::IrFunction {
         .iter()
         .map(|param| resolve_type(&param.ty))
         .collect();
-    let mut builder = FunctionBuilder::new(function.name.0.clone(), param_types);
+    let mut builder = FunctionBuilder::new_with_async(
+        function.name.0.clone(),
+        param_types,
+        function.is_async,
+    );
     let entry = builder.entry();
 
     let mut env = Env::new();

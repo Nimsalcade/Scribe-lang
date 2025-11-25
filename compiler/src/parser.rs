@@ -352,24 +352,33 @@ impl<'a> Parser<'a> {
         let start = self.expect_keyword(Keyword::For)?;
         let (variable, _) = self.expect_identifier()?;
 
-        // Check for `in` keyword (collection iteration) or expression followed by `to`
+        // Check for `in` keyword
         let iterator = if self.match_keyword(Keyword::In)? {
-            // Collection iteration: `for item in collection:`
-            let collection = self.parse_expression()?;
-            ForIterator::Collection(collection)
-        } else {
-            // Range iteration: `for i = start to end:` or just `for start to end:`
-            // For simplicity, we'll use: `for variable in start to end:`
-            // But we already consumed `for variable`, so check if next is expression
-            let start_expr = self.parse_expression()?;
-            self.expect_keyword(Keyword::To)?;
-            let end_expr = self.parse_expression()?;
-            let inclusive = self.match_keyword(Keyword::Inclusive)?;
-            ForIterator::Range {
-                start: start_expr,
-                end: end_expr,
-                inclusive,
+            // Could be `for item in collection:` or `for i in start to end:`
+            let first_expr = self.parse_comparison()?;  // Parse low precedence expression to stop at `to`
+            
+            // Check if next is `to` keyword (range iteration)
+            if self.peek_kind()? == TokenKind::Keyword(Keyword::To) {
+                self.advance()?;  // consume 'to'
+                let end_expr = self.parse_expression()?;
+                let inclusive = self.match_keyword(Keyword::Inclusive)?;
+                ForIterator::Range {
+                    start: first_expr,
+                    end: end_expr,
+                    inclusive,
+                }
+            } else {
+                // Collection iteration
+                ForIterator::Collection(first_expr)
             }
+        } else {
+            // Old syntax: `for variable start to end:` (no `in` keyword)
+            // For now, return error - the new syntax requires `in`
+            return Err(ParserError::UnexpectedToken {
+                expected: "in keyword for loop variable".to_string(),
+                found: self.peek_kind()?,
+                span: Span::default(),
+            });
         };
 
         self.expect_block_introducer()?;

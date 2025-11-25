@@ -2,27 +2,12 @@ module examples.timer
 
 use time
 
-# Demonstrate async sleep with concurrent timers
-async fn countdown(name: text, seconds: number) -> number:
-    let i = seconds
-    for i to 0:
-        print(name)
-        print(": ")
+# Demonstrate async sleep with timer
+async fn main() -> number:
+    println("Starting timer...")
+    for i in 0 to 3:
         println(i)
         time.sleep(1000)  # sleep 1 second (1000ms)
-    print(name)
-    println(" done!")
-    0
-
-async fn main() -> number:
-    # Start multiple concurrent countdowns
-    println("Starting concurrent timers...")
-    
-    # In the future, these would run concurrently with `start`
-    # For now, they run sequentially
-    start countdown("Timer A", 3)
-    start countdown("Timer B", 2)
-    
-    println("All timers complete!")
+    println("Timer complete!")
     0
 
