@@ -336,6 +336,9 @@ impl<'a> Parser<'a> {
         let else_block = if self.match_keyword(Keyword::Else)? {
             self.expect_block_introducer()?;
             Some(self.parse_block("else body")?)
+        } else if self.match_keyword(Keyword::Otherwise)? {
+            self.expect_block_introducer()?;
+            Some(self.parse_block("otherwise body")?)
         } else {
             None
         };
@@ -513,18 +516,27 @@ impl<'a> Parser<'a> {
     fn parse_comparison(&mut self) -> Result<Expression, ParserError> {
         let mut expr = self.parse_term()?;
         loop {
-            let op = match self.peek_kind()? {
-                TokenKind::Less => Some(ComparisonOp::Less),
-                TokenKind::LessEqual => Some(ComparisonOp::LessEqual),
-                TokenKind::Greater => Some(ComparisonOp::Greater),
-                TokenKind::GreaterEqual => Some(ComparisonOp::GreaterEqual),
-                _ => None,
+            let (op, is_natural) = match self.peek_kind()? {
+                TokenKind::Less => (Some(ComparisonOp::Less), false),
+                TokenKind::LessEqual => (Some(ComparisonOp::LessEqual), false),
+                TokenKind::Greater => (Some(ComparisonOp::Greater), false),
+                TokenKind::GreaterEqual => (Some(ComparisonOp::GreaterEqual), false),
+                TokenKind::Keyword(Keyword::Is) => {
+                    // Natural language comparison: "is [greater|less|at] [than|least|most] ..." or "is [equal|not]"
+                    self.advance()?; // consume 'is'
+                    let natural_op = self.parse_natural_comparison()?;
+                    (Some(natural_op), true)
+                }
+                _ => (None, false),
             };
             let op = match op {
                 Some(op) => op,
                 None => break,
             };
-            self.advance()?;
+            // Only consume the operator token if it's not from natural language parsing (which already consumed it)
+            if !is_natural {
+                self.advance()?;
+            }
             let left = expr;
             let right = self.parse_term()?;
             let span = left.span;
@@ -538,6 +550,66 @@ impl<'a> Parser<'a> {
             );
         }
         Ok(expr)
+    }
+
+    /// Parse natural language comparison phrases after 'is' keyword has been consumed.
+    /// Supported phrases:
+    /// - "is greater than" -> Greater
+    /// - "is less than" -> Less
+    /// - "is at least" -> GreaterEqual
+    /// - "is at most" -> LessEqual
+    /// - "is equal to" -> Equal
+    /// - "is not" -> NotEqual
+    fn parse_natural_comparison(&mut self) -> Result<ComparisonOp, ParserError> {
+        match self.peek_kind()? {
+            TokenKind::Keyword(Keyword::Not) => {
+                self.advance()?;
+                Ok(ComparisonOp::NotEqual)
+            }
+            TokenKind::Keyword(Keyword::Equal) => {
+                // "is equal" or "is equal to"
+                self.advance()?;
+                let _ = self.match_keyword(Keyword::To)?; // consume optional 'to'
+                Ok(ComparisonOp::Equal)
+            }
+            TokenKind::Identifier(ref ident) => {
+                let ident_str = ident.clone();
+                self.advance()?;
+                match ident_str.as_str() {
+                    "greater" => {
+                        self.expect_keyword(Keyword::Than)
+                            .map_err(|_| ParserError::unexpected_comparison_phrase("greater than"))?;
+                        Ok(ComparisonOp::Greater)
+                    }
+                    "less" => {
+                        self.expect_keyword(Keyword::Than)
+                            .map_err(|_| ParserError::unexpected_comparison_phrase("less than"))?;
+                        Ok(ComparisonOp::Less)
+                    }
+                    "at" => {
+                        match self.peek_kind()? {
+                            TokenKind::Identifier(ref next_ident) if next_ident == "least" => {
+                                self.advance()?;
+                                Ok(ComparisonOp::GreaterEqual)
+                            }
+                            TokenKind::Identifier(ref next_ident) if next_ident == "most" => {
+                                self.advance()?;
+                                Ok(ComparisonOp::LessEqual)
+                            }
+                            _ => Err(ParserError::unexpected_comparison_phrase(
+                                "at least or at most",
+                            )),
+                        }
+                    }
+                    "equal" => {
+                        let _ = self.match_keyword(Keyword::To)?; // consume optional 'to'
+                        Ok(ComparisonOp::Equal)
+                    }
+                    _ => Err(ParserError::unexpected_comparison_phrase(&ident_str)),
+                }
+            }
+            _ => Err(ParserError::unexpected_comparison_phrase("comparison operator")),
+        }
     }
 
     fn parse_term(&mut self) -> Result<Expression, ParserError> {
@@ -984,6 +1056,14 @@ impl ParserError {
             expected: expected.to_string(),
             found: token.kind,
             span: token.span,
+        }
+    }
+
+    fn unexpected_comparison_phrase(phrase: &str) -> Self {
+        ParserError::UnexpectedToken {
+            expected: format!("valid natural comparison phrase after 'is', got {}", phrase),
+            found: TokenKind::Eof,
+            span: Span { line: 0, column: 0 },
         }
     }
 

@@ -108,15 +108,14 @@ This PRD defines **v0.1**: a usable core language, a compiler, a minimal runtime
 
 * Indentation-based blocks (similar to Python).
 * No `{}` for blocks.
-* End markers (`end`) allowed in long form, optional in concise form.
+* Use colons (`:`) to start a block; indentation levels define block scope.
 
 Examples:
 
 ```scribe
-# Long form
-if count is greater than 10 then
+# Natural language form
+if count is greater than 10:
     print("too many")
-end
 
 # Short form
 if count > 10:
@@ -175,16 +174,6 @@ Type inference:
 Syntax:
 
 ```scribe
-record User:
-    id: int64
-    name: text
-    email: text
-end
-```
-
-Short form:
-
-```scribe
 record User(id: int64, name: text, email: text)
 ```
 
@@ -233,16 +222,15 @@ Compiler maps these to standard library types:
 Support both forms:
 
 ```scribe
-# Verbose
-if count is greater than 10 then
+# Natural language form
+if count is greater than 10:
     print("too many")
-else if count is 0 then
+elif count is 0:
     print("none")
-otherwise
+otherwise:
     print("some")
-end
 
-# Concise
+# Concise form
 if count > 10:
     print("too many")
 elif count == 0:
@@ -257,19 +245,19 @@ Mapping of natural operators:
 * `is less than` → `<`
 * `is at least` → `>=`
 * `is at most` → `<=`
-* `is equal to` / `is` → `==`
+* `is equal to` → `==`
 * `is not` → `!=`
+
+Both `else` and `otherwise` are supported as aliases for the else branch.
 
 **Loops**
 
 ```scribe
 for i in 0 to 10:
     print(i)
-end
 
 for each name in names:
     print(name)
-end
 ```
 
 Spec:
@@ -283,12 +271,6 @@ Spec:
 **Functions**
 
 ```scribe
-# Long form
-function add(a: number, b: number) gives number:
-    return a + b
-end
-
-# Short form
 fn add(a: number, b: number) -> number:
     a + b    # last expression returns
 ```
@@ -386,7 +368,6 @@ fn read_config(path: text) -> Result[Config, IoError]:
     let data = file.read_text(path)
     if data is Err:
         return data
-    end
     ...
 ```
 
@@ -472,7 +453,6 @@ Syntax:
 for each url in urls in parallel:
     let resp = await http.get(url)
     print(length of resp.body)
-end
 ```
 
 v0.1:

@@ -1,0 +1,28 @@
+fn main() -> number:
+    let count = 15
+    
+    if count is greater than 10:
+        println("count is greater than 10")
+    
+    if count is less than 20:
+        println("count is less than 20")
+    
+    if count is at least 15:
+        println("count is at least 15")
+    
+    if count is at most 20:
+        println("count is at most 20")
+    
+    if count is equal to 15:
+        println("count is equal to 15")
+    
+    if count is not 0:
+        println("count is not 0")
+    
+    # Using otherwise
+    if count > 100:
+        println("count is very large")
+    otherwise:
+        println("count is not very large")
+    
+    0
