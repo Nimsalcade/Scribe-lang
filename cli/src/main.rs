@@ -11,10 +11,13 @@ use scribe_compiler::{
     diagnostics::{Diagnostic, Diagnostics},
     discover_project_files,
     ir::{self, IrModule},
-    lower, typeck, Compiler, ModuleResolver,
+    lower, typeck, Compiler, ProjectCompileResult,
 };
 use scribe_runtime::Runtime;
 use serde::Deserialize;
+
+// Ensure scribe_std is compiled (staticlib) by referencing it
+use scribe_std;
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub enum EmitKind {
@@ -64,6 +67,9 @@ enum Commands {
 }
 
 fn main() {
+    // Ensure scribe_std static library is linked
+    scribe_std::build_marker();
+    
     let cli = Cli::parse();
     if let Err(err) = dispatch(cli.command) {
         eprintln!("error: {err}");
@@ -107,15 +113,57 @@ fn handle_build(project: &Path, release: bool, emit: EmitKind) -> Result<()> {
         println!("discovered {} source file(s)", project_files.len());
     }
 
-    // Initialize module resolver
-    let _resolver = ModuleResolver::new(&root);
-
+    // Compile the entire project with module resolution
     let entry = resolve_entry(&root)?;
-    let module = compile_and_check(&entry)?;
-    let ir = lower::lower_module(&module);
+    let compile_result = compile_project(&root, &entry)?;
+
+    println!(
+        "compiled {} module(s) (entry: {})",
+        compile_result.modules.len(),
+        compile_result.entry_path.display()
+    );
+
+    // Type-check all modules and collect diagnostics
+    let mut has_errors = false;
+    let mut module_sources = std::collections::HashMap::new();
+
+    for (module_key, compiled_module) in &compile_result.modules {
+        // Try to read source file for diagnostics
+        let source = std::fs::read_to_string(&compiled_module.file_path).ok();
+        if let Some(ref src) = source {
+            module_sources.insert(compiled_module.file_path.to_string_lossy().to_string(), src.clone());
+        }
+
+        // Type check the module
+        if let Err(errors) = typeck::check_module(&compiled_module.ast) {
+            has_errors = true;
+            let mut diagnostics = Diagnostics::new();
+            for error in errors {
+                diagnostics.push(Diagnostic::from(error));
+            }
+
+            // Print diagnostics with correct file path
+            if let Some(source) = module_sources.get(&compiled_module.file_path.to_string_lossy().to_string()) {
+                print_diagnostics(
+                    &compiled_module.file_path,
+                    source,
+                    &diagnostics,
+                );
+            } else {
+                eprintln!("{}: type checking failed", module_key);
+            }
+        }
+    }
+
+    if has_errors {
+        return Err(anyhow!("type checking failed"));
+    }
+
+    // Lower the entry module to IR
+    let ir = lower::lower_module(&compile_result.entry_module);
 
     // Write human-readable IR for debugging
-    let ir_path = write_ir_stub(&root, &entry, &ir)?;
+    let ir_path = write_ir_stub(&root, &compile_result.entry_path, &ir)?;
     println!("wrote IR -> {}", ir_path.display());
 
     // Emit object file
@@ -232,6 +280,13 @@ impl Default for BuildSection {
 
 fn default_main_entry() -> String {
     "main".to_string()
+}
+
+fn compile_project(project_root: &Path, entry_file: &Path) -> Result<ProjectCompileResult> {
+    let mut compiler = Compiler::new();
+    compiler
+        .compile_project(project_root, entry_file)
+        .map_err(|err| anyhow!("compilation failed: {}", err))
 }
 
 fn compile_and_check(file: &Path) -> Result<Module> {
@@ -355,27 +410,51 @@ fn link_executable(project: &Path, obj_path: &Path, _release: bool) -> Result<Pa
 }
 
 /// Find the Scribe standard library static archive
+/// Returns the full path to the libscribe_std.a file
 fn find_scribe_std_lib() -> Option<PathBuf> {
-    // Check common locations for the compiled std library
-    let candidates = [
-        // Development: in the workspace target directory
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .map(|p| p.join("target/release/libscribe_std.a")),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .map(|p| p.join("target/debug/libscribe_std.a")),
-        // Installed location
-        dirs::data_local_dir().map(|p| p.join("scribe/lib/libscribe_std.a")),
-    ];
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.to_path_buf());
 
-    for candidate in candidates.into_iter().flatten() {
-        if candidate.exists() {
-            return Some(candidate);
+    // Try to find the library in deps directory (where Cargo puts versioned artifacts)
+    if let Some(root) = workspace_root {
+        // Check debug deps first
+        let debug_deps = root.join("target/debug/deps");
+        if debug_deps.exists() {
+            // Look for any libscribe_std-*.a file
+            if let Ok(entries) = std::fs::read_dir(&debug_deps) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(name) = path.file_name() {
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with("libscribe_std-") && name_str.ends_with(".a") {
+                            return Some(path);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check release deps
+        let release_deps = root.join("target/release/deps");
+        if release_deps.exists() {
+            if let Ok(entries) = std::fs::read_dir(&release_deps) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(name) = path.file_name() {
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with("libscribe_std-") && name_str.ends_with(".a") {
+                            return Some(path);
+                        }
+                    }
+                }
+            }
         }
     }
 
-    None
+    // Fallback to installed location
+    dirs::data_local_dir().map(|p| p.join("scribe/lib/libscribe_std.a"))
+
 }
 
 fn format_ir(ir_module: &IrModule) -> String {

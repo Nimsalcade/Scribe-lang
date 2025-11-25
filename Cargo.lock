@@ -1207,6 +1207,7 @@ dependencies = [
  "scribe-codegen",
  "scribe-compiler",
  "scribe-runtime",
+ "scribe-std",
  "serde",
  "toml",
 ]

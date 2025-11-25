@@ -350,35 +350,32 @@ impl<'a> Parser<'a> {
 
     fn parse_for_statement(&mut self) -> Result<Statement, ParserError> {
         let start = self.expect_keyword(Keyword::For)?;
+        
+        // Check for optional `each` keyword: `for each name in collection:`
+        let _has_each = self.match_keyword(Keyword::Each)?;
+        
         let (variable, _) = self.expect_identifier()?;
-
-        // Check for `in` keyword
-        let iterator = if self.match_keyword(Keyword::In)? {
-            // Could be `for item in collection:` or `for i in start to end:`
-            let first_expr = self.parse_comparison()?;  // Parse low precedence expression to stop at `to`
-            
-            // Check if next is `to` keyword (range iteration)
-            if self.peek_kind()? == TokenKind::Keyword(Keyword::To) {
-                self.advance()?;  // consume 'to'
-                let end_expr = self.parse_expression()?;
-                let inclusive = self.match_keyword(Keyword::Inclusive)?;
-                ForIterator::Range {
-                    start: first_expr,
-                    end: end_expr,
-                    inclusive,
-                }
-            } else {
-                // Collection iteration
-                ForIterator::Collection(first_expr)
+        
+        // The `in` keyword is required: `for i in ...`
+        self.expect_keyword(Keyword::In)?;
+        
+        // Parse the first expression
+        let start_or_collection = self.parse_primary_expression()?;
+        
+        // Check if this is a range (followed by `to`) or a collection
+        let iterator = if self.match_keyword(Keyword::To)? {
+            // Range iteration: `for i in start to end:` or `for i in start to end inclusive:`
+            let end_expr = self.parse_expression()?;
+            let inclusive = self.match_keyword(Keyword::Inclusive)?;
+            ForIterator::Range {
+                start: start_or_collection,
+                end: end_expr,
+                inclusive,
             }
         } else {
-            // Old syntax: `for variable start to end:` (no `in` keyword)
-            // For now, return error - the new syntax requires `in`
-            return Err(ParserError::UnexpectedToken {
-                expected: "in keyword for loop variable".to_string(),
-                found: self.peek_kind()?,
-                span: Span::default(),
-            });
+            // Collection iteration: `for item in collection:`
+            // start_or_collection is actually the collection
+            ForIterator::Collection(start_or_collection)
         };
 
         self.expect_block_introducer()?;

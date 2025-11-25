@@ -15,6 +15,7 @@ toml = "0.8"
 scribe-compiler = { path = "../compiler" }
 scribe-runtime = { path = "../runtime" }
 scribe-codegen = { path = "../codegen" }
+scribe-std = { path = "../std" }
 
 [dev-dependencies]
 assert_cmd = "2.0"
