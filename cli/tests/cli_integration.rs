@@ -95,7 +95,6 @@ fn run_hello_world_executable() {
 // These tests verify the CLI doesn't panic when processing these examples.
 
 #[test]
-#[ignore = "timer example uses features not yet fully implemented in type checker"]
 fn check_example_timer() {
     let examples = workspace_root().join("examples/timer");
     let bin = assert_cmd::cargo::cargo_bin!("scribe-cli");

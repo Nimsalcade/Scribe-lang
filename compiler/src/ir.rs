@@ -22,6 +22,7 @@ pub struct IrFunction {
     pub name: String,
     pub params: Vec<Type>,
     pub blocks: Vec<BasicBlock>,
+    pub is_async: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +125,10 @@ pub struct FunctionBuilder {
 
 impl FunctionBuilder {
     pub fn new(name: impl Into<String>, params: Vec<Type>) -> Self {
+        Self::new_with_async(name, params, false)
+    }
+
+    pub fn new_with_async(name: impl Into<String>, params: Vec<Type>, is_async: bool) -> Self {
         let entry = BasicBlock::new(BlockId(0));
         let param_count = params.len() as u32;
         Self {
@@ -131,6 +136,7 @@ impl FunctionBuilder {
                 name: name.into(),
                 params,
                 blocks: vec![entry],
+                is_async,
             },
             next_block: 1,
             next_value: param_count,
