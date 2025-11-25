@@ -13,6 +13,7 @@ pub enum Type {
     Text,
     Unit,
     Unknown,
+    Record(String), // Record type identified by name
 }
 
 impl std::fmt::Display for Type {
@@ -23,6 +24,7 @@ impl std::fmt::Display for Type {
             Type::Text => write!(f, "text"),
             Type::Unit => write!(f, "unit"),
             Type::Unknown => write!(f, "unknown"),
+            Type::Record(name) => write!(f, "{}", name),
         }
     }
 }
@@ -36,18 +38,62 @@ pub struct TypeError {
 #[derive(Debug, Clone)]
 pub enum TypeErrorKind {
     UndefinedVariable { name: String },
+    UndefinedFunction { name: String },
+    UndefinedRecord { name: String },
     TypeMismatch { expected: Type, found: Type },
     MissingReturnValue { expected: Type },
     UnexpectedReturnValue,
     NonBooleanCondition,
     NonNumericOperand,
+    ArgumentCountMismatch { expected: usize, found: usize },
+    MissingRecordField { record: String, field: String },
+    UnexpectedRecordField { record: String, field: String },
 }
 
 pub fn check_module(module: &Module) -> Result<(), Vec<TypeError>> {
     let mut checker = Checker::new();
+    
+    // First pass: collect function signatures and record definitions
+    for function in &module.functions {
+        let param_types = function
+            .signature
+            .params
+            .iter()
+            .map(|param| checker.resolve_type_expr(&param.ty))
+            .collect();
+        let return_type = function
+            .signature
+            .return_type
+            .as_ref()
+            .map(|ty| checker.resolve_type_expr(ty))
+            .unwrap_or(Type::Unit);
+        
+        checker.functions.insert(
+            function.name.0.clone(),
+            FunctionSignatureInfo {
+                param_types,
+                return_type,
+            },
+        );
+    }
+    
+    for record in &module.records {
+        let fields = record
+            .fields
+            .iter()
+            .map(|field| (field.name.0.clone(), checker.resolve_type_expr(&field.ty)))
+            .collect();
+        checker.records.insert(
+            record.name.0.clone(),
+            RecordInfo { fields },
+        );
+    }
+    
+    // Second pass: type-check function bodies
     for function in &module.functions {
         checker.check_function(function);
     }
+    
     if checker.errors.is_empty() {
         Ok(())
     } else {
@@ -55,10 +101,25 @@ pub fn check_module(module: &Module) -> Result<(), Vec<TypeError>> {
     }
 }
 
+/// Stores information about a function signature
+#[derive(Debug, Clone)]
+struct FunctionSignatureInfo {
+    param_types: Vec<Type>,
+    return_type: Type,
+}
+
+/// Stores information about a record type
+#[derive(Debug, Clone)]
+struct RecordInfo {
+    fields: HashMap<String, Type>,
+}
+
 struct Checker {
     scopes: Vec<HashMap<String, Type>>,
     current_return: Type,
     errors: Vec<TypeError>,
+    functions: HashMap<String, FunctionSignatureInfo>,
+    records: HashMap<String, RecordInfo>,
 }
 
 impl Checker {
@@ -67,6 +128,8 @@ impl Checker {
             scopes: Vec::new(),
             current_return: Type::Unit,
             errors: Vec::new(),
+            functions: HashMap::new(),
+            records: HashMap::new(),
         }
     }
 
@@ -235,11 +298,63 @@ impl Checker {
                 Literal::Text(_) => Type::Text,
                 Literal::Bool(_) => Type::Bool,
             },
-            ExpressionKind::Call { arguments, .. } => {
-                for arg in arguments {
-                    self.check_expression(arg);
+            ExpressionKind::Call { callee, arguments } => {
+                // Check all arguments
+                let arg_types: Vec<Type> = arguments
+                    .iter()
+                    .map(|arg| self.check_expression(arg))
+                    .collect();
+                
+                // Look up the function to validate it exists and has the right arity
+                match &callee.kind {
+                    ExpressionKind::Identifier(ident) => {
+                        if let Some(fn_info) = self.functions.get(&ident.0) {
+                            // Check argument count
+                            if fn_info.param_types.len() != arg_types.len() {
+                                self.errors.push(TypeError {
+                                    span: expr.span,
+                                    kind: TypeErrorKind::ArgumentCountMismatch {
+                                        expected: fn_info.param_types.len(),
+                                        found: arg_types.len(),
+                                    },
+                                });
+                                return Type::Unknown;
+                            }
+                            
+                            // Check argument types
+                            for (expected, actual) in fn_info.param_types.iter().zip(arg_types.iter()) {
+                                if !self.types_compatible(expected, actual) {
+                                    self.errors.push(TypeError {
+                                        span: expr.span,
+                                        kind: TypeErrorKind::TypeMismatch {
+                                            expected: expected.clone(),
+                                            found: actual.clone(),
+                                        },
+                                    });
+                                }
+                            }
+                            
+                            fn_info.return_type.clone()
+                        } else {
+                            self.errors.push(TypeError {
+                                span: expr.span,
+                                kind: TypeErrorKind::UndefinedFunction {
+                                    name: ident.0.clone(),
+                                },
+                            });
+                            Type::Unknown
+                        }
+                    }
+                    _ => {
+                        self.errors.push(TypeError {
+                            span: callee.span,
+                            kind: TypeErrorKind::UndefinedFunction {
+                                name: "<unknown>".to_string(),
+                            },
+                        });
+                        Type::Unknown
+                    }
                 }
-                Type::Unknown
             }
             ExpressionKind::Binary { op, left, right } => {
                 let left_ty = self.check_expression(left);
@@ -296,13 +411,66 @@ impl Checker {
                 }
                 Type::Bool
             }
-            ExpressionKind::RecordConstruct { fields, .. } => {
-                // Check all field values
-                for (_, value) in fields {
-                    self.check_expression(value);
+            ExpressionKind::RecordConstruct { name, fields } => {
+                // Clone the record info to avoid borrow issues
+                let record_info = self.records.get(&name.0).cloned();
+                
+                if let Some(record_info) = record_info {
+                    // Check all provided field values
+                    let mut provided_fields = std::collections::HashSet::new();
+                    
+                    for (field_name, value) in fields {
+                        provided_fields.insert(field_name.0.clone());
+                        
+                        // Check if this field exists
+                        if !record_info.fields.contains_key(&field_name.0) {
+                            self.errors.push(TypeError {
+                                span: expr.span,
+                                kind: TypeErrorKind::UnexpectedRecordField {
+                                    record: name.0.clone(),
+                                    field: field_name.0.clone(),
+                                },
+                            });
+                        }
+                        
+                        // Check the field type
+                        let value_ty = self.check_expression(value);
+                        if let Some(expected_ty) = record_info.fields.get(&field_name.0) {
+                            if !self.types_compatible(expected_ty, &value_ty) {
+                                self.errors.push(TypeError {
+                                    span: value.span,
+                                    kind: TypeErrorKind::TypeMismatch {
+                                        expected: expected_ty.clone(),
+                                        found: value_ty,
+                                    },
+                                });
+                            }
+                        }
+                    }
+                    
+                    // Check for missing fields
+                    for required_field in record_info.fields.keys() {
+                        if !provided_fields.contains(required_field) {
+                            self.errors.push(TypeError {
+                                span: expr.span,
+                                kind: TypeErrorKind::MissingRecordField {
+                                    record: name.0.clone(),
+                                    field: required_field.clone(),
+                                },
+                            });
+                        }
+                    }
+                    
+                    Type::Record(name.0.clone())
+                } else {
+                    self.errors.push(TypeError {
+                        span: expr.span,
+                        kind: TypeErrorKind::UndefinedRecord {
+                            name: name.0.clone(),
+                        },
+                    });
+                    Type::Unknown
                 }
-                // Return Unknown since we don't track record types yet
-                Type::Unknown
             }
             ExpressionKind::FieldAccess { object, .. } => {
                 self.check_expression(object);
@@ -377,9 +545,24 @@ impl Checker {
                 "number" | "int32" | "int64" | "float64" => Type::Number,
                 "text" | "string" => Type::Text,
                 "bool" => Type::Bool,
-                _ => Type::Unknown,
+                _ => {
+                    // Check if it's a record name
+                    if self.records.contains_key(&ident.0) {
+                        Type::Record(ident.0.clone())
+                    } else {
+                        Type::Unknown
+                    }
+                }
             },
         }
+    }
+    
+    /// Check if two types are compatible for assignment/comparison
+    fn types_compatible(&self, expected: &Type, found: &Type) -> bool {
+        if expected == &Type::Unknown || found == &Type::Unknown {
+            return true;
+        }
+        expected == found
     }
 
     fn define(&mut self, name: String, ty: Type) {
@@ -412,6 +595,12 @@ impl std::fmt::Display for TypeErrorKind {
             TypeErrorKind::UndefinedVariable { name } => {
                 write!(f, "use of undefined variable '{name}'")
             }
+            TypeErrorKind::UndefinedFunction { name } => {
+                write!(f, "call to undefined function '{name}'")
+            }
+            TypeErrorKind::UndefinedRecord { name } => {
+                write!(f, "use of undefined record type '{name}'")
+            }
             TypeErrorKind::TypeMismatch { expected, found } => {
                 write!(f, "type mismatch: expected {expected}, found {found}")
             }
@@ -425,6 +614,15 @@ impl std::fmt::Display for TypeErrorKind {
                 write!(f, "condition must evaluate to a bool")
             }
             TypeErrorKind::NonNumericOperand => write!(f, "operand must be numeric"),
+            TypeErrorKind::ArgumentCountMismatch { expected, found } => {
+                write!(f, "argument count mismatch: expected {expected}, found {found}")
+            }
+            TypeErrorKind::MissingRecordField { record, field } => {
+                write!(f, "record '{record}' is missing required field '{field}'")
+            }
+            TypeErrorKind::UnexpectedRecordField { record, field } => {
+                write!(f, "record '{record}' does not have field '{field}'")
+            }
         }
     }
 }

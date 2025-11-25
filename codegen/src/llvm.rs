@@ -173,10 +173,42 @@ fn lower_function<'ctx>(
                     };
                     float_values.insert(*dest, result);
                 }
-                Instruction::Call { .. } => {
-                    return Err(CodegenError::Unsupported(
-                        "function calls are not yet supported".into(),
-                    ))
+                Instruction::Call { dest, callee, args } => {
+                    // Look up the function or declare it if not yet seen
+                    let callee_name = callee;
+                    
+                    // Get or create the function reference
+                    let float_ty = context.f64_type();
+                    let arg_types: Vec<BasicMetadataTypeEnum> = args
+                        .iter()
+                        .map(|_| float_ty.into())
+                        .collect();
+                    
+                    let fn_type = float_ty.fn_type(&arg_types, false);
+                    let fn_value = match module.get_function(callee_name) {
+                        Some(f) => f,
+                        None => module.add_function(callee_name, fn_type, Some(Linkage::External)),
+                    };
+                    
+                    // Evaluate all arguments
+                    let arg_values: Result<Vec<_>, _> = args
+                        .iter()
+                        .map(|arg_id| {
+                            get_float_value(*arg_id, &float_values)
+                                .map(|v| BasicMetadataValueEnum::FloatValue(v))
+                        })
+                        .collect();
+                    
+                    let arg_values = arg_values?;
+                    
+                    // Call the function
+                    let call_site = builder.build_call(fn_value, &arg_values, "call");
+                    if let Some(dest_id) = dest {
+                        if let Some(result) = call_site.try_as_basic_value().left() {
+                            let float_result = result.into_float_value();
+                            float_values.insert(*dest_id, float_result);
+                        }
+                    }
                 }
                 Instruction::Compare { dest, op, lhs, rhs } => {
                     let left = get_float_value(*lhs, &float_values)?;
