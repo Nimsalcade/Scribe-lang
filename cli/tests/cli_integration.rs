@@ -67,13 +67,34 @@ fn build_example_emits_executable() {
     let _ = output;
 }
 
+#[test]
+fn run_hello_world_executable() {
+    let project = workspace_root().join("examples/hello-world");
+    let target_dir = project.join("target/scribe");
+    
+    // Clean the target directory to ensure a fresh build
+    let _ = fs::remove_dir_all(&target_dir);
+    
+    let bin = assert_cmd::cargo::cargo_bin!("scribe-cli");
+    let output = Command::new(bin)
+        .args(["run", "--project", project.to_str().unwrap()])
+        .output()
+        .expect("failed to run scribe-cli");
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    
+    // Check that the executable ran successfully with native binary output
+    assert!(output.status.success(), "scribe-cli run failed with status: {}\nstdout: {}\nstderr: {}", output.status, stdout, stderr);
+    assert!(stdout.contains("Hello, Scribe!"), "expected 'Hello, Scribe!' in output, got:\nstdout: {}\nstderr: {}", stdout, stderr);
+}
+
 // Note: The timer and web-api examples use syntax features (module declarations,
 // use statements, records, for loops, etc.) that the parser now supports but
 // the type checker and lowering passes don't fully handle yet.
 // These tests verify the CLI doesn't panic when processing these examples.
 
 #[test]
-#[ignore = "timer example uses features not yet fully implemented in type checker"]
 fn check_example_timer() {
     let examples = workspace_root().join("examples/timer");
     let bin = assert_cmd::cargo::cargo_bin!("scribe-cli");
@@ -100,4 +121,38 @@ fn check_example_web_api() {
         ])
         .assert()
         .success();
+}
+
+#[test]
+fn build_multi_module_project() {
+    // Test that multi-module projects can be compiled without panics
+    let project = workspace_root().join("examples/demo");
+    let target_ir = project.join("target/scribe/main.ir");
+    let target_obj = project.join("target/scribe/module.o");
+    let _ = fs::remove_file(&target_ir);
+    let _ = fs::remove_file(&target_obj);
+
+    let bin = assert_cmd::cargo::cargo_bin!("scribe-cli");
+    let output = Command::new(bin)
+        .args([
+            "build",
+            "--project",
+            project.to_str().unwrap(),
+            "--emit",
+            "obj",
+        ])
+        .output()
+        .expect("failed to run build");
+
+    // Check that it succeeded
+    assert!(output.status.success(), "build failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    // Check that artifacts were emitted
+    assert!(target_ir.exists(), "expected IR file at {}", target_ir.display());
+    assert!(target_obj.exists(), "expected object file at {}", target_obj.display());
+
+    // Check that the output mentions multiple modules were compiled
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("compiled 3 module(s)"), 
+        "output did not mention 3 compiled modules: {}", stdout);
 }

@@ -353,26 +353,32 @@ impl<'a> Parser<'a> {
 
     fn parse_for_statement(&mut self) -> Result<Statement, ParserError> {
         let start = self.expect_keyword(Keyword::For)?;
+        
+        // Check for optional `each` keyword: `for each name in collection:`
+        let _has_each = self.match_keyword(Keyword::Each)?;
+        
         let (variable, _) = self.expect_identifier()?;
-
-        // Check for `in` keyword (collection iteration) or expression followed by `to`
-        let iterator = if self.match_keyword(Keyword::In)? {
-            // Collection iteration: `for item in collection:`
-            let collection = self.parse_expression()?;
-            ForIterator::Collection(collection)
-        } else {
-            // Range iteration: `for i = start to end:` or just `for start to end:`
-            // For simplicity, we'll use: `for variable in start to end:`
-            // But we already consumed `for variable`, so check if next is expression
-            let start_expr = self.parse_expression()?;
-            self.expect_keyword(Keyword::To)?;
+        
+        // The `in` keyword is required: `for i in ...`
+        self.expect_keyword(Keyword::In)?;
+        
+        // Parse the first expression
+        let start_or_collection = self.parse_primary_expression()?;
+        
+        // Check if this is a range (followed by `to`) or a collection
+        let iterator = if self.match_keyword(Keyword::To)? {
+            // Range iteration: `for i in start to end:` or `for i in start to end inclusive:`
             let end_expr = self.parse_expression()?;
             let inclusive = self.match_keyword(Keyword::Inclusive)?;
             ForIterator::Range {
-                start: start_expr,
+                start: start_or_collection,
                 end: end_expr,
                 inclusive,
             }
+        } else {
+            // Collection iteration: `for item in collection:`
+            // start_or_collection is actually the collection
+            ForIterator::Collection(start_or_collection)
         };
 
         self.expect_block_introducer()?;

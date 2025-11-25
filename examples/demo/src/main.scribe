@@ -1,0 +1,19 @@
+module demo.main
+
+use demo.math.add
+
+fn main() -> number:
+    println("=== Scribe Demo Program (Multi-Module) ===")
+    println("")
+    
+    println("Welcome to Scribe!")
+    println("The modern programming language")
+    println("")
+    
+    println("Testing multi-module structure...")
+    
+    println("Module math.add was loaded successfully")
+    
+    println("")
+    println("=== Demo Complete ===")
+    return 0

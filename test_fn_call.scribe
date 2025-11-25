@@ -1,0 +1,6 @@
+fn add(a: number, b: number) -> number:
+    return a + b
+
+fn main() -> number:
+    let result = add(5, 3)
+    return result

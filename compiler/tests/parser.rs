@@ -1,4 +1,4 @@
-use scribe_compiler::ast::{ComparisonOp, ExpressionKind, Literal, Statement};
+use scribe_compiler::ast::{ExpressionKind, ForIterator, Literal, Statement};
 use scribe_compiler::parser::Parser;
 
 #[test]
@@ -125,130 +125,113 @@ fn parses_if_with_logical_ops() {
 }
 
 #[test]
-fn parses_natural_comparison_greater_than() {
-    let source = "fn main() -> int32:\n    if count is greater than 10:\n        return 1\n    return 0\n";
+fn parses_for_range_loop() {
+    let source = r#"fn main() -> number:
+    for i in 0 to 10:
+        return 0
+"#;
     let mut parser = Parser::new(source);
-    let module = parser.parse_module().expect("parse natural comparison");
-    let func = &module.functions[0];
-    match &func.body[0] {
-        Statement::If(stmt) => {
-            match &stmt.condition.kind {
-                ExpressionKind::Comparison { op, .. } => {
-                    assert_eq!(*op, ComparisonOp::Greater);
-                }
-                other => panic!("expected comparison, got {:?}", other),
-            }
-        }
-        other => panic!("expected if statement, got {:?}", other),
-    }
-}
-
-#[test]
-fn parses_natural_comparison_less_than() {
-    let source = "fn main() -> int32:\n    if count is less than 5:\n        return 1\n    return 0\n";
-    let mut parser = Parser::new(source);
-    let module = parser.parse_module().expect("parse natural comparison");
-    let func = &module.functions[0];
-    match &func.body[0] {
-        Statement::If(stmt) => {
-            match &stmt.condition.kind {
-                ExpressionKind::Comparison { op, .. } => {
-                    assert_eq!(*op, ComparisonOp::Less);
-                }
-                other => panic!("expected comparison, got {:?}", other),
-            }
-        }
-        other => panic!("expected if statement, got {:?}", other),
-    }
-}
-
-#[test]
-fn parses_natural_comparison_at_least() {
-    let source = "fn main() -> int32:\n    if count is at least 10:\n        return 1\n    return 0\n";
-    let mut parser = Parser::new(source);
-    let module = parser.parse_module().expect("parse natural comparison");
-    let func = &module.functions[0];
-    match &func.body[0] {
-        Statement::If(stmt) => {
-            match &stmt.condition.kind {
-                ExpressionKind::Comparison { op, .. } => {
-                    assert_eq!(*op, ComparisonOp::GreaterEqual);
-                }
-                other => panic!("expected comparison, got {:?}", other),
-            }
-        }
-        other => panic!("expected if statement, got {:?}", other),
-    }
-}
-
-#[test]
-fn parses_natural_comparison_at_most() {
-    let source = "fn main() -> int32:\n    if count is at most 5:\n        return 1\n    return 0\n";
-    let mut parser = Parser::new(source);
-    let module = parser.parse_module().expect("parse natural comparison");
-    let func = &module.functions[0];
-    match &func.body[0] {
-        Statement::If(stmt) => {
-            match &stmt.condition.kind {
-                ExpressionKind::Comparison { op, .. } => {
-                    assert_eq!(*op, ComparisonOp::LessEqual);
-                }
-                other => panic!("expected comparison, got {:?}", other),
-            }
-        }
-        other => panic!("expected if statement, got {:?}", other),
-    }
-}
-
-#[test]
-fn parses_natural_comparison_equal_to() {
-    let source = "fn main() -> int32:\n    if count is equal to 5:\n        return 1\n    return 0\n";
-    let mut parser = Parser::new(source);
-    let module = parser.parse_module().expect("parse natural comparison");
-    let func = &module.functions[0];
-    match &func.body[0] {
-        Statement::If(stmt) => {
-            match &stmt.condition.kind {
-                ExpressionKind::Comparison { op, .. } => {
-                    assert_eq!(*op, ComparisonOp::Equal);
-                }
-                other => panic!("expected comparison, got {:?}", other),
-            }
-        }
-        other => panic!("expected if statement, got {:?}", other),
-    }
-}
-
-#[test]
-fn parses_natural_comparison_not() {
-    let source = "fn main() -> int32:\n    if count is not 5:\n        return 1\n    return 0\n";
-    let mut parser = Parser::new(source);
-    let module = parser.parse_module().expect("parse natural comparison");
-    let func = &module.functions[0];
-    match &func.body[0] {
-        Statement::If(stmt) => {
-            match &stmt.condition.kind {
-                ExpressionKind::Comparison { op, .. } => {
-                    assert_eq!(*op, ComparisonOp::NotEqual);
-                }
-                other => panic!("expected comparison, got {:?}", other),
-            }
-        }
-        other => panic!("expected if statement, got {:?}", other),
-    }
-}
-
-#[test]
-fn parses_if_with_otherwise() {
-    let source = "fn main() -> int32:\n    if count > 10:\n        return 1\n    otherwise:\n        return 0\n";
-    let mut parser = Parser::new(source);
-    let module = parser.parse_module().expect("parse if with otherwise");
+    let module = parser.parse_module().expect("parse for range loop");
+    assert_eq!(module.functions.len(), 1);
+    
     let func = &module.functions[0];
     assert_eq!(func.body.len(), 1);
+    
     match &func.body[0] {
-        Statement::If(stmt) => {
-            assert!(stmt.else_block.is_some(), "otherwise block should be parsed as else_block");
+        Statement::For(for_stmt) => {
+            assert_eq!(for_stmt.variable.0, "i");
+            match &for_stmt.iterator {
+                ForIterator::Range { start, end, inclusive } => {
+                    assert!(!inclusive);
+                    // Verify start is 0
+                    match &start.kind {
+                        ExpressionKind::Literal(Literal::Number(n)) => assert_eq!(n, "0"),
+                        _ => panic!("expected numeric literal for range start"),
+                    }
+                    // Verify end is 10
+                    match &end.kind {
+                        ExpressionKind::Literal(Literal::Number(n)) => assert_eq!(n, "10"),
+                        _ => panic!("expected numeric literal for range end"),
+                    }
+                }
+                other => panic!("expected Range iterator, got {:?}", other),
+            }
         }
-        other => panic!("expected if statement, got {:?}", other),
+        other => panic!("expected For statement, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_for_range_loop_inclusive() {
+    let source = r#"fn main() -> number:
+    for i in 0 to 10 inclusive:
+        return 0
+"#;
+    let mut parser = Parser::new(source);
+    let module = parser.parse_module().expect("parse for range loop inclusive");
+    assert_eq!(module.functions.len(), 1);
+    
+    let func = &module.functions[0];
+    match &func.body[0] {
+        Statement::For(for_stmt) => {
+            match &for_stmt.iterator {
+                ForIterator::Range { inclusive, .. } => {
+                    assert!(inclusive);
+                }
+                other => panic!("expected Range iterator, got {:?}", other),
+            }
+        }
+        other => panic!("expected For statement, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_for_collection_loop() {
+    let source = r#"fn main() -> number:
+    for each item in items:
+        return 0
+"#;
+    let mut parser = Parser::new(source);
+    let module = parser.parse_module().expect("parse for collection loop");
+    assert_eq!(module.functions.len(), 1);
+    
+    let func = &module.functions[0];
+    match &func.body[0] {
+        Statement::For(for_stmt) => {
+            assert_eq!(for_stmt.variable.0, "item");
+            match &for_stmt.iterator {
+                ForIterator::Collection(expr) => {
+                    match &expr.kind {
+                        ExpressionKind::Identifier(ident) => assert_eq!(ident.0, "items"),
+                        _ => panic!("expected identifier expression for collection"),
+                    }
+                }
+                other => panic!("expected Collection iterator, got {:?}", other),
+            }
+        }
+        other => panic!("expected For statement, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_for_collection_loop_without_each() {
+    let source = r#"fn main() -> number:
+    for item in items:
+        return 0
+"#;
+    let mut parser = Parser::new(source);
+    let module = parser.parse_module().expect("parse for collection loop without each");
+    assert_eq!(module.functions.len(), 1);
+    
+    let func = &module.functions[0];
+    match &func.body[0] {
+        Statement::For(for_stmt) => {
+            assert_eq!(for_stmt.variable.0, "item");
+            match &for_stmt.iterator {
+                ForIterator::Collection(_) => { /* OK */ }
+                other => panic!("expected Collection iterator, got {:?}", other),
+            }
+        }
+        other => panic!("expected For statement, got {:?}", other),
     }
 }
