@@ -11,7 +11,7 @@ use scribe_compiler::{
     diagnostics::{Diagnostic, Diagnostics},
     discover_project_files,
     ir::{self, IrModule},
-    lower, typeck, Compiler, ModuleResolver,
+    lower, typeck, Compiler, ProjectCompileResult,
 };
 use scribe_runtime::Runtime;
 use serde::Deserialize;
@@ -113,15 +113,57 @@ fn handle_build(project: &Path, release: bool, emit: EmitKind) -> Result<()> {
         println!("discovered {} source file(s)", project_files.len());
     }
 
-    // Initialize module resolver
-    let _resolver = ModuleResolver::new(&root);
-
+    // Compile the entire project with module resolution
     let entry = resolve_entry(&root)?;
-    let module = compile_and_check(&entry)?;
-    let ir = lower::lower_module(&module);
+    let compile_result = compile_project(&root, &entry)?;
+
+    println!(
+        "compiled {} module(s) (entry: {})",
+        compile_result.modules.len(),
+        compile_result.entry_path.display()
+    );
+
+    // Type-check all modules and collect diagnostics
+    let mut has_errors = false;
+    let mut module_sources = std::collections::HashMap::new();
+
+    for (module_key, compiled_module) in &compile_result.modules {
+        // Try to read source file for diagnostics
+        let source = std::fs::read_to_string(&compiled_module.file_path).ok();
+        if let Some(ref src) = source {
+            module_sources.insert(compiled_module.file_path.to_string_lossy().to_string(), src.clone());
+        }
+
+        // Type check the module
+        if let Err(errors) = typeck::check_module(&compiled_module.ast) {
+            has_errors = true;
+            let mut diagnostics = Diagnostics::new();
+            for error in errors {
+                diagnostics.push(Diagnostic::from(error));
+            }
+
+            // Print diagnostics with correct file path
+            if let Some(source) = module_sources.get(&compiled_module.file_path.to_string_lossy().to_string()) {
+                print_diagnostics(
+                    &compiled_module.file_path,
+                    source,
+                    &diagnostics,
+                );
+            } else {
+                eprintln!("{}: type checking failed", module_key);
+            }
+        }
+    }
+
+    if has_errors {
+        return Err(anyhow!("type checking failed"));
+    }
+
+    // Lower the entry module to IR
+    let ir = lower::lower_module(&compile_result.entry_module);
 
     // Write human-readable IR for debugging
-    let ir_path = write_ir_stub(&root, &entry, &ir)?;
+    let ir_path = write_ir_stub(&root, &compile_result.entry_path, &ir)?;
     println!("wrote IR -> {}", ir_path.display());
 
     // Emit object file
@@ -238,6 +280,13 @@ impl Default for BuildSection {
 
 fn default_main_entry() -> String {
     "main".to_string()
+}
+
+fn compile_project(project_root: &Path, entry_file: &Path) -> Result<ProjectCompileResult> {
+    let mut compiler = Compiler::new();
+    compiler
+        .compile_project(project_root, entry_file)
+        .map_err(|err| anyhow!("compilation failed: {}", err))
 }
 
 fn compile_and_check(file: &Path) -> Result<Module> {

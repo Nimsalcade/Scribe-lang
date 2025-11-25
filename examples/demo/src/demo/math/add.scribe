@@ -1,0 +1,4 @@
+module demo.math.add
+
+fn add_numbers(a: number, b: number) -> number:
+    a + b

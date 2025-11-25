@@ -12,16 +12,28 @@ pub mod span;
 pub mod typeck;
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub use error::CompilerError;
 pub use resolver::{discover_project_files, ModuleResolver, ResolveError, ResolvedModule};
 
 /// Compiled module with its AST and metadata
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompiledModule {
     pub path: String,
+    pub file_path: PathBuf,
     pub ast: ast::Module,
+}
+
+/// Result of compiling a project, containing entry module info and all compiled modules
+#[derive(Debug)]
+pub struct ProjectCompileResult {
+    /// The entry module (main file) AST
+    pub entry_module: ast::Module,
+    /// Path to the entry module source file
+    pub entry_path: PathBuf,
+    /// All compiled modules including the entry module, keyed by module path
+    pub modules: HashMap<String, CompiledModule>,
 }
 
 /// High-level compiler driver that orchestrates lexing and parsing passes.
@@ -53,46 +65,83 @@ impl Compiler {
     }
 
     /// Compile a project with all its modules
+    /// Returns a result containing the entry module and a map of all compiled modules
     pub fn compile_project(
         &mut self,
         project_root: &Path,
         entry_file: &Path,
-    ) -> Result<Vec<CompiledModule>, CompilerError> {
+    ) -> Result<ProjectCompileResult, CompilerError> {
         let mut resolver = ModuleResolver::new(project_root);
-        let mut compiled = Vec::new();
 
         // Compile entry file
         let entry_ast = self.compile_file(entry_file)?;
+        let mut modules = HashMap::new();
+
+        // Add entry module to map
+        let entry_path_str = entry_file.to_string_lossy().to_string();
+        modules.insert(
+            entry_path_str.clone(),
+            CompiledModule {
+                path: entry_path_str,
+                file_path: entry_file.to_path_buf(),
+                ast: entry_ast.clone(),
+            },
+        );
 
         // Resolve and compile imported modules
-        for use_stmt in &entry_ast.uses {
+        self.compile_dependencies(
+            project_root,
+            &entry_ast,
+            &mut resolver,
+            &mut modules,
+        )?;
+
+        Ok(ProjectCompileResult {
+            entry_module: entry_ast,
+            entry_path: entry_file.to_path_buf(),
+            modules,
+        })
+    }
+
+    /// Recursively compile all dependencies of a module
+    fn compile_dependencies(
+        &mut self,
+        project_root: &Path,
+        module: &ast::Module,
+        resolver: &mut ModuleResolver,
+        compiled: &mut HashMap<String, CompiledModule>,
+    ) -> Result<(), CompilerError> {
+        for use_stmt in &module.uses {
             let path_str = use_stmt.path.to_string();
-            if !self.modules.contains_key(&path_str) {
-                if let Ok(resolved) = resolver.resolve(&use_stmt.path) {
-                    if let Ok(module_ast) = self.compile_file(&resolved.file_path) {
-                        let compiled_module = CompiledModule {
-                            path: path_str.clone(),
-                            ast: module_ast,
-                        };
-                        self.modules.insert(path_str, compiled_module);
-                    }
+
+            // Skip if already compiled
+            if compiled.contains_key(&path_str) {
+                continue;
+            }
+
+            // Resolve the module
+            if let Ok(resolved) = resolver.resolve(&use_stmt.path) {
+                // Compile the module file
+                if let Ok(module_ast) = self.compile_file(&resolved.file_path) {
+                    let resolved_path = resolved.file_path.to_string_lossy().to_string();
+
+                    // Store by both module path and file path for lookup flexibility
+                    let compiled_module = CompiledModule {
+                        path: path_str.clone(),
+                        file_path: resolved.file_path.clone(),
+                        ast: module_ast.clone(),
+                    };
+                    compiled.insert(path_str, compiled_module.clone());
+
+                    // Also store by file path
+                    compiled.insert(resolved_path, compiled_module);
+
+                    // Recursively compile dependencies of this module
+                    self.compile_dependencies(project_root, &module_ast, resolver, compiled)?;
                 }
             }
         }
-
-        // Add entry module
-        let entry_path = entry_file.to_string_lossy().to_string();
-        compiled.push(CompiledModule {
-            path: entry_path,
-            ast: entry_ast,
-        });
-
-        // Add all resolved modules
-        for (_, module) in self.modules.drain() {
-            compiled.push(module);
-        }
-
-        Ok(compiled)
+        Ok(())
     }
 
     /// Get a reference to compiled modules
