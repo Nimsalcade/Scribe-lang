@@ -18,20 +18,19 @@ This repo contains the Scribe compiler, runtime, standard library, and examples 
 
 Scribe is built around a few ideas:
 
-1. **Plain-language syntax**  
-   You can write either:
+1. **Plain-language syntax**
+    You can write either natural-language or concise forms:
 
-   ```scribe
-   if count is greater than 10 then
-       print("too many")
-   end
-````
+    ```scribe
+    if count is greater than 10:
+        print("too many")
+    ```
 
 or the shorter form:
 
 ```scribe
 if count > 10:
-    print("too many")
+     print("too many")
 ```
 
 2. **Performance without surprises**
@@ -119,7 +118,6 @@ module example.math
 export fn mean(values: list of number) -> number:
     if length of values is 0:
         error ValueError("empty list")
-    end
     let s = sum(values)
     s / length of values
 ```

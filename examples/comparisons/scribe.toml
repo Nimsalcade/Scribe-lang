@@ -1,0 +1,14 @@
+[package]
+name = "comparisons-example"
+version = "0.1.0"
+description = "Example demonstrating natural language comparisons and otherwise keyword"
+authors = ["Scribe"]
+license = "MIT"
+
+[build]
+main = "main"
+
+[toolchain]
+min_version = "0.1.0"
+
+[dependencies]

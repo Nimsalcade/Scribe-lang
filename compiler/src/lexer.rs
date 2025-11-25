@@ -40,6 +40,8 @@ pub enum Keyword {
     True,
     False,
     Inclusive,
+    Than,
+    Equal,
 }
 
 impl Keyword {
@@ -76,6 +78,8 @@ impl Keyword {
             "true" => Some(Keyword::True),
             "false" => Some(Keyword::False),
             "inclusive" => Some(Keyword::Inclusive),
+            "than" => Some(Keyword::Than),
+            "equal" => Some(Keyword::Equal),
             _ => None,
         }
     }
